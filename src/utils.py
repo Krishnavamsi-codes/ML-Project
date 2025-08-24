@@ -6,6 +6,7 @@ import pandas as pd
 import dill
 from src.exception import CustomException
 from sklearn.metrics import r2_score
+from sklearn.model_selection import GridSearchCV
 def save_object(file_path,obj):
     try:
         dir_path=os.path.dirname(file_path)
@@ -42,28 +43,30 @@ def save_object(file_path,obj):
 from sklearn.metrics import r2_score
 import sys
 
-def evaluate_models(X_train, y_train, X_test, y_test, models):
-    try:
-        report = {}
+def evaluate_models(X_train, y_train, X_test, y_test, models, param):
+    report = {}
+    fitted_models = {}
 
-        for i in range(len(list(models))):
-            model = list(models.values())[i]
+    for model_name, model in models.items():
+        para = param[model_name]
 
-            # Train model
-            model.fit(X_train, y_train)
+        gs = GridSearchCV(model, para, cv=3, n_jobs=-1, verbose=1)
+        gs.fit(X_train, y_train)
 
-            # Predictions
-            y_train_pred = model.predict(X_train)
-            y_test_pred = model.predict(X_test)
+        best_model = gs.best_estimator_
 
-            # Model performance
-            train_model_score = r2_score(y_train, y_train_pred)
-            test_model_score = r2_score(y_test, y_test_pred)
+        # Safety: ensure fitted
+        if not hasattr(best_model, "predict"):
+            best_model.fit(X_train, y_train)
 
-            # Save report
-            report[list(models.keys())[i]] = test_model_score
+        y_train_pred = best_model.predict(X_train)
+        y_test_pred = best_model.predict(X_test)
 
-        return report
+        train_score = r2_score(y_train, y_train_pred)
+        test_score = r2_score(y_test, y_test_pred)
 
-    except Exception as e:
-        raise CustomException(e, sys)
+        report[model_name] = test_score
+        fitted_models[model_name] = best_model   # ✅ store fitted model
+
+    return report, fitted_models
+
